@@ -1,0 +1,36 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Node modules
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Python virtual environment
+ai-service/venv/
+ai-service/__pycache__/
+*.pyc
+
+# Environment variables
+.env
+server/.env
+client/.env
+
+# Build outputs
+client/dist/
+
+# Uploads and temporary data
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Editor/OS specific
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

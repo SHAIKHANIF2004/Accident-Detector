@@ -1,0 +1,45 @@
+# === Common ===
+node_modules/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+env/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# === CrashSenseApp ===
+logs/
+*.log
+npm-debug.log*
+
+CrashSenseApp/client/dist/
+CrashSenseApp/server/uploads/*
+!CrashSenseApp/server/uploads/.gitkeep
+
+# === Engine (ML Models & Datasets) ===
+*.mp4
+*.mkv
+*.avi
+*.pt
+*.onnx
+*.h5
+*.backup
+
+Engine/Videos/
+Engine/Features/
+Engine/codes/yolov8n.pt
+Engine/yolov8n.pt
+
+# Editor/OS specific
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
