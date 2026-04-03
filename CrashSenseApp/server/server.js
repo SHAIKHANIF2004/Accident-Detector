@@ -38,11 +38,26 @@ app.use('/api/incidents', require('./routes/incidents'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/videos', require('./routes/videos'));
 
-// Make sure express trusts proxy if hosted on Render behind load balancers
+// Make sure express trusts proxy if hosted behind load balancers
 app.set('trust proxy', 1);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+
+// ─── Serve React Frontend (Production) ─────────────────────────
+const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+app.use(express.static(clientBuildPath));
+
+// Catch-all: serve index.html for any non-API route (React Router)
+app.get('*', (req, res) => {
+  const indexPath = path.join(clientBuildPath, 'index.html');
+  const fs = require('fs');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).json({ error: 'Frontend not built. Run npm run build:client' });
+  }
+});
 
 // Socket.IO connection
 io.on('connection', (socket) => {
