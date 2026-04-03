@@ -1,19 +1,12 @@
 import axios from 'axios';
 
-// In production (Render), the frontend and backend are on SEPARATE domains.
-// VITE_API_URL must be set in the build environment, or we detect production and use the known URL.
+// In production, set VITE_API_URL to the backend's public URL (e.g. Railway, Vercel, etc.)
+// In local dev, leave it unset — Vite proxy handles /api and /socket.io requests.
 function resolveBackendUrl() {
-  // 1. If VITE_API_URL is explicitly set, always use it
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  
-  // 2. In production on Render: frontend is crash-sense-web, backend is crash-sense-api
-  if (typeof window !== 'undefined' && window.location.hostname.includes('crash-sense-web')) {
-    return 'https://crash-sense-api.onrender.com';
-  }
-
-  // 3. Local development: use relative paths (same origin via Vite proxy or same server)
+  // Local development: use relative paths (Vite proxy forwards to localhost:5000)
   return '';
 }
 

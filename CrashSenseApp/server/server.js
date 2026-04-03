@@ -193,8 +193,12 @@ connectDB().then(() => {
   console.error('Failed to start server:', err);
 });
 
-// Graceful shutdown
+// Graceful shutdown (SIGINT for local dev, SIGTERM for Railway/Docker)
 process.on('SIGINT', () => {
   stopSimulation();
   process.exit(0);
+});
+process.on('SIGTERM', () => {
+  stopSimulation();
+  server.close(() => process.exit(0));
 });

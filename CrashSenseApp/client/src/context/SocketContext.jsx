@@ -14,15 +14,9 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     // Resolve backend URL — must match api.js logic exactly
-    let backendUrl = import.meta.env.VITE_API_URL;
-    if (!backendUrl) {
-      // In production on Render: frontend is crash-sense-web, backend is crash-sense-api
-      if (typeof window !== 'undefined' && window.location.hostname.includes('crash-sense-web')) {
-        backendUrl = 'https://crash-sense-api.onrender.com';
-      } else {
-        backendUrl = window.location.origin; // Local dev
-      }
-    }
+    // In production, VITE_API_URL points to the backend (e.g. Railway URL)
+    // In local dev, falls back to window.location.origin (Vite proxy handles it)
+    const backendUrl = import.meta.env.VITE_API_URL || window.location.origin;
     
     // Create socket instance — connect to the base server, not /api
     const socketUrl = backendUrl.replace('/api', '');
