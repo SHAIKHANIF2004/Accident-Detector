@@ -183,62 +183,143 @@ exports.analyzeVideo = (req, res) => {
     return res.status(404).json({ error: 'Video file not found or expired from temporary storage. Please re-upload.' });
   }
 
-  // --- RENDER FREE TIER: DEMO MODE FIX ---
-  // To prevent the 512MB RAM constraint from instantly crashing the server (OOM)
-  // when loading YOLO/PyTorch, we simulate the analysis process in production.
+  // --- RENDER FREE TIER FIX: MICROSERVICES VIA HUGGING FACE OR DEMO MODE ---
   if (process.env.NODE_ENV === 'production') {
-    console.log(`[AI Analysis Demo Mode] Simulating analysis for ${safeName}`);
-    
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
-    res.write(`data: ${JSON.stringify({ status: 'started' })}\n\n`);
-
-    let progress = 0;
-    const simInterval = setInterval(() => {
-      progress += 10;
-      res.write(`data: ${JSON.stringify({ status: 'processing', progress, timestamp: Date.now() })}\n\n`);
-      
-      if (progress >= 100) {
-        clearInterval(simInterval);
-        
-        // Generate a fake accident marker for demo purposes
-        const markers = [
-          { time: 2, confidence: 94, objects: ['car', 'motorcycle'] }
-        ];
-
-        const analysisData = {
-          userId: req.user._id,
-          fileName: safeName,
-          fileSize: fs.statSync(filePath).size,
-          duration: 0,
-          markers: markers,
-          originalVideoPath: `/api/videos/stream/${safeName}`,
-          annotatedVideoUrl: `/api/videos/stream/${safeName}`, // Return original video
-          processedAt: new Date()
-        };
-
-        Analysis.create(analysisData).then(savedAnalysis => {
-          res.write(`data: ${JSON.stringify({
-            success: true,
-            markers: markers,
-            annotatedVideoUrl: `/api/videos/stream/${safeName}`,
-            analysisId: savedAnalysis._id
-          })}\n\n`);
-          res.end();
-        }).catch(err => {
-          res.write(`data: ${JSON.stringify({ error: 'Failed to save analysis' })}\n\n`);
-          res.end();
+    if (process.env.HF_SPACE_URL) {
+        console.log(`[AI Analysis HF] Sending video to Hugging Face API: ${process.env.HF_SPACE_URL}`);
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
         });
-      }
-    }, 1000); // 10 second simulation
+        res.write(`data: ${JSON.stringify({ status: 'started' })}\n\n`);
 
-    return;
+        const simInterval = setInterval(() => {
+          res.write(`data: ${JSON.stringify({ status: 'processing', timestamp: Date.now(), msg: 'Waiting for ML server...' })}\n\n`);
+        }, 5000);
+
+        (async () => {
+            try {
+                // 1. Upload video to Hugging Face
+                const fileBuffer = fs.readFileSync(filePath);
+                const blob = new Blob([fileBuffer], { type: 'video/mp4' });
+                const formData = new FormData();
+                formData.append('video', blob, safeName);
+
+                const response = await fetch(`${process.env.HF_SPACE_URL}/analyze`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error(`HF Server returned ${response.status}`);
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error);
+
+                // 2. Download the annotated video from HF Space back to Render
+                let finalNameTarget = safeName;
+                if (data.video_id) {
+                    const videoRes = await fetch(`${process.env.HF_SPACE_URL}/download/${data.video_id}`);
+                    if (videoRes.ok) {
+                        const dlFileName = `hf-annotated-${safeName}`;
+                        const dlFilePath = path.join(UPLOADS_DIR, dlFileName);
+                        const writeStream = fs.createWriteStream(dlFilePath);
+                        
+                        await new Promise((resolve, reject) => {
+                            videoRes.body.pipe(writeStream);
+                            videoRes.body.on('error', reject);
+                            writeStream.on('finish', resolve);
+                        });
+                        
+                        finalNameTarget = dlFileName;
+                    }
+                }
+
+                clearInterval(simInterval);
+
+                // 3. Save to database
+                const analysisData = {
+                  userId: req.user._id,
+                  fileName: safeName,
+                  fileSize: fs.statSync(filePath).size,
+                  duration: 0,
+                  markers: data.markers || [],
+                  originalVideoPath: `/api/videos/stream/${safeName}`,
+                  annotatedVideoUrl: `/api/videos/stream/${finalNameTarget}`,
+                  processedAt: new Date()
+                };
+
+                const savedAnalysis = await Analysis.create(analysisData);
+                res.write(`data: ${JSON.stringify({
+                  success: true,
+                  markers: data.markers || [],
+                  annotatedVideoUrl: `/api/videos/stream/${finalNameTarget}`,
+                  analysisId: savedAnalysis._id
+                })}\n\n`);
+                res.end();
+            } catch (err) {
+                console.error("[AI Analysis HF] Error communicating with Hugging Face:", err);
+                clearInterval(simInterval);
+                res.write(`data: ${JSON.stringify({ error: err.message || 'Failed connecting to Hugging Face ML API' })}\n\n`);
+                res.end();
+            }
+        })();
+        return;
+    } else {
+        // --- FALLBACK DEMO MODE ---
+        console.log(`[AI Analysis Demo Mode] Simulating analysis for ${safeName}`);
+        
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
+        });
+        res.write(`data: ${JSON.stringify({ status: 'started' })}\n\n`);
+
+        let progress = 0;
+        const simInterval = setInterval(() => {
+          progress += 10;
+          res.write(`data: ${JSON.stringify({ status: 'processing', progress, timestamp: Date.now() })}\n\n`);
+          
+          if (progress >= 100) {
+            clearInterval(simInterval);
+            
+            const markers = [
+              { time: 2, confidence: 94, objects: ['car', 'motorcycle'] }
+            ];
+
+            const analysisData = {
+              userId: req.user._id,
+              fileName: safeName,
+              fileSize: fs.statSync(filePath).size,
+              duration: 0,
+              markers: markers,
+              originalVideoPath: `/api/videos/stream/${safeName}`,
+              annotatedVideoUrl: `/api/videos/stream/${safeName}`, 
+              processedAt: new Date()
+            };
+
+            Analysis.create(analysisData).then(savedAnalysis => {
+              res.write(`data: ${JSON.stringify({
+                success: true,
+                markers: markers,
+                annotatedVideoUrl: `/api/videos/stream/${safeName}`,
+                analysisId: savedAnalysis._id
+              })}\n\n`);
+              res.end();
+            }).catch(err => {
+              res.write(`data: ${JSON.stringify({ error: 'Failed to save analysis' })}\n\n`);
+              res.end();
+            });
+          }
+        }, 1000); 
+
+        return;
+    }
   }
-  // --- END DEMO MODE ---
+  // --- END RENDER MICROSERVICE LOGIC ---
 
   // LOCAL DEVELOPMENT: Run the actual heavy Python PyTorch script
   const pythonScript = path.resolve(__dirname, '..', '..', '..', 'Engine', 'codes', 'test_inference_lite.py');
